@@ -1,0 +1,32 @@
+[
+  {
+    "id": "momentum",
+    "title": "Cross-sectional momentum and formation windows",
+    "source_url": "https://github.com/melihgiray/quant-research-system/blob/1bdbf1d7f12c8173b070b89c9f07dad36b51ef15/quant_system/signals/momentum.py",
+    "text": "Project-authored summary: Cross-sectional momentum ranks assets using price at t minus skip divided by price at t minus lookback, minus one. The default formation uses 252 trading days with the most recent 21 days skipped. Long and short legs each have absolute weight 0.5. Positions rebalance every 21 trading days. The backtest engine applies target weights with a one-day lag."
+  },
+  {
+    "id": "execution",
+    "title": "Execution timing and look-ahead prevention",
+    "source_url": "https://github.com/melihgiray/quant-research-system/blob/1bdbf1d7f12c8173b070b89c9f07dad36b51ef15/quant_system/backtest/engine.py",
+    "text": "Project-authored summary: A target weight formed at the close of T earns the return indexed T+1. A centralized shift prevents same-row signals from earning same-row returns. This close-fill assumption remains an execution approximation; next-open execution is stricter. Dates must be sorted and assets aligned. Changing future observations must not alter prior realized results."
+  },
+  {
+    "id": "regime",
+    "title": "Volatility-based defensive position sizing",
+    "source_url": "https://github.com/melihgiray/quant-research-system/blob/1bdbf1d7f12c8173b070b89c9f07dad36b51ef15/quant_system/regime/switcher.py",
+    "text": "Project-authored summary: Regime sizing changes exposure while keeping the underlying strategy. A defensive label scales target portfolio weights by 0.5. A lower exposure may reduce volatility but does not guarantee a better Sharpe ratio or smaller drawdown. All comparisons must share the same dates, dataset and cost assumptions."
+  },
+  {
+    "id": "metrics",
+    "title": "Return, volatility, Sharpe and drawdown",
+    "source_url": "https://github.com/melihgiray/quant-research-system/blob/1bdbf1d7f12c8173b070b89c9f07dad36b51ef15/quant_system/performance/analytics.py",
+    "text": "Project-authored summary: Annualized return compounds daily returns. Annualized volatility scales daily sample standard deviation by the square root of 252. Sharpe scales mean excess return divided by standard deviation; this fixture uses zero risk-free rate. Drawdown measures the fall from a running equity peak. A performance difference alone is not statistical significance."
+  },
+  {
+    "id": "fixture-limitations",
+    "title": "Synthetic fixture and simplified cost model",
+    "source_url": "local://docs/METHODOLOGY.md",
+    "text": "Local implementation note: The bundled dataset contains six synthetic assets generated with seed 1729, not real ETF prices. Reported numbers test tool execution only. The runner compares baseline momentum with volatility-scaled momentum over a common post-warmup period. Costs equal absolute target-weight turnover times basis points divided by 10000. The model omits weight drift, market impact, short borrowing and funding costs. This fixture cannot establish alpha or statistical significance."
+  }
+]
