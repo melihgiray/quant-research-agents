@@ -8,6 +8,10 @@
 - [x] Local BM25 evidence, SQL experiment records, optional FRED integration.
 - [x] HTML/Markdown/JSON reports, traces and numerical checks.
 - [x] Tests and a live development evaluation harness.
+- [x] Credential-safe setup diagnostics and a one-command offline walkthrough.
+- [x] Fingerprinted evidence, per-run provenance and offline report replay.
+- [x] A labeled retrieval development set and failure-aware evaluation summaries.
+- [x] Compatible-window SQL comparisons and configurable execution limits.
 - [ ] Verify Gemini end to end with credentials and preserve a live trace.
 - [ ] Verify FRED against its live API.
 

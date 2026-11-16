@@ -10,6 +10,11 @@ integration is implemented but has not yet been verified with a live API key.
 The included data is synthetic. There are no claims of investment performance
 or measured improvements from multiple agents.
 
+For a complete local demonstration and a guide to explaining the implementation,
+follow the [project walkthrough](docs/DEMO_GUIDE.md). Run
+`python scripts/demo_portfolio.py` after installation to exercise both architectures,
+verify their reports, score retrieval, and compare cost configurations without API keys.
+
 ![Scripted demonstration report using synthetic data](docs/preview.png)
 
 ## Run the demonstration
