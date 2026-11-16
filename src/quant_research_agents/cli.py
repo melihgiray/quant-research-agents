@@ -10,6 +10,7 @@ from .comparison import compare_experiments
 from .diagnostics import diagnose
 from .evaluation import evaluate
 from .evaluation_summary import summarize_evaluation
+from .models import RunLimits
 from .retrieval_evaluation import evaluate_retrieval
 from .runtime import DEFAULT_REQUEST, run_research
 from .store import ExperimentStore
@@ -42,6 +43,14 @@ def main() -> int:
     evaluation.add_argument("--cases", type=Path, default=Path("evals/cases.json"))
     evaluation.add_argument("--trials", type=int, default=1, help="Repetitions per case, 1 to 20")
     evaluation.add_argument("--seed", type=int, default=42, help="Execution-order shuffle seed")
+    for options_parser in (demo, live, evaluation):
+        options_parser.add_argument("--max-llm-calls", type=int, default=16)
+        options_parser.add_argument("--timeout-seconds", type=float, default=180)
+        options_parser.add_argument(
+            "--no-review-repair",
+            action="store_true",
+            help="Disable the correction attempt for an ablation",
+        )
     retrieval = commands.add_parser(
         "evaluate-retrieval", help="Score retrieval without model calls"
     )
@@ -64,6 +73,15 @@ def main() -> int:
     summarize.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
+        limits = (
+            RunLimits(
+                max_llm_calls=args.max_llm_calls,
+                timeout_seconds=args.timeout_seconds,
+                review_repair=not args.no_review_repair,
+            )
+            if args.command in {"demo", "run", "evaluate"}
+            else None
+        )
         if args.command == "summarize":
             result = summarize_evaluation(json.loads(args.evaluation.read_text()))
             if args.output:
@@ -96,7 +114,13 @@ def main() -> int:
             result = {
                 "evaluation_file": str(
                     asyncio.run(
-                        evaluate(args.cases, args.workspace, trials=args.trials, seed=args.seed)
+                        evaluate(
+                            args.cases,
+                            args.workspace,
+                            trials=args.trials,
+                            seed=args.seed,
+                            limits=limits,
+                        )
                     )
                 )
             }
@@ -108,6 +132,7 @@ def main() -> int:
                     args.architecture,
                     "scripted" if args.command == "demo" else "live",
                     database_url=os.getenv("DATABASE_URL"),
+                    limits=limits,
                 )
             )
         print(json.dumps(result, indent=2))

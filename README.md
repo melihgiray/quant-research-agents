@@ -62,6 +62,12 @@ model ID before collecting reproducible benchmarks. The CLI limits each request
 to 16 model calls and 180 seconds; these are execution bounds, not a dollar budget.
 Live requests use your provider account and may incur charges.
 
+The CLI accepts `--max-llm-calls` (1–64), `--timeout-seconds` (1–600), and
+`--no-review-repair` on `run`, `demo`, and `evaluate`. Defaults remain
+16 calls, 180 seconds and one possible correction. Every run records the selected
+settings. Disabling correction provides an ablation without changing the tools
+or the final numerical checks.
+
 For the ADK development interface, run from the repository root:
 
 ```sh

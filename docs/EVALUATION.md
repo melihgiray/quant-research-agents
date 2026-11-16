@@ -35,6 +35,11 @@ costs stay unknown; sums explicitly cover observed records only. The command ref
 scripted results presented as live evaluations. An interrupted artifact stays labeled
 interrupted, and the summary does not imply statistical significance.
 
+For a correction ablation, repeat the same case file, model, seed, trial count
+and execution limits with `--no-review-repair`. Compare the recorded runtime
+settings before interpreting differences. This disables only correction after a
+failed review; the multi-agent workflow still contains its initial reviewer.
+
 1. Freeze a separate 40–60-task held-out set before prompt tuning.
 2. Label expected actions, parameter values, acceptable refusals, and supporting
    source IDs. Include missing evidence, contradictory notes, malformed outputs,

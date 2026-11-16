@@ -63,6 +63,7 @@ def reviewer_instruction(context):
 
 class FinalizeReport(BaseAgent):
     service: Any
+    repair_enabled: bool = True
 
     def checked_review(self, state):
         try:
@@ -86,12 +87,14 @@ class FinalizeReport(BaseAgent):
 
     async def _run_async_impl(self, ctx):
         state = ctx.session.state
-        for attempt in range(2):
+        attempts = 2 if self.repair_enabled else 1
+        for attempt in range(attempts):
             try:
                 review, result = self.checked_review(state)
                 break
             except ReviewValidationError as error:
-                feedback = {"error": str(error), "attempt": attempt + 1, "retry": attempt == 0}
+                retry = attempt < attempts - 1
+                feedback = {"error": str(error), "attempt": attempt + 1, "retry": retry}
                 yield Event(
                     author=self.name,
                     content=types.Content(
@@ -100,11 +103,11 @@ class FinalizeReport(BaseAgent):
                     actions=EventActions(
                         state_delta={
                             "validation_feedback": feedback,
-                            "review_repair_attempts": 1,
+                            "review_repair_attempts": attempt + int(retry),
                         }
                     ),
                 )
-                if attempt == 1:
+                if not retry:
                     raise
                 async for event in self.sub_agents[0].run_async(ctx):
                     yield event
@@ -139,6 +142,7 @@ def build_agent(
     model: Any = None,
     database_url: str | None = None,
     model_factory=None,
+    review_repair: bool = True,
 ) -> BaseNode:
     if architecture not in {"multi", "single"}:
         raise ValueError("architecture must be multi or single")
@@ -159,8 +163,17 @@ def build_agent(
             ),
         )
 
-    repair = llm("review_repair", reviewer_instruction, schema=Review, output_key="review")
-    finalizer = FinalizeReport(name="save_verified_report", service=service, sub_agents=[repair])
+    repairs = (
+        [llm("review_repair", reviewer_instruction, schema=Review, output_key="review")]
+        if review_repair
+        else []
+    )
+    finalizer = FinalizeReport(
+        name="save_verified_report",
+        service=service,
+        sub_agents=repairs,
+        repair_enabled=review_repair,
+    )
     if architecture == "single":
         single = llm(
             "single_analyst",

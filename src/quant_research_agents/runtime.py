@@ -13,6 +13,7 @@ from google.genai import types
 
 from .agents import build_agent
 from .demo_model import ScriptedDemoModel
+from .models import RunLimits
 from .provenance import capture_provenance
 
 DEFAULT_REQUEST = (
@@ -28,8 +29,10 @@ async def run_research(
     mode="live",
     model_factory=None,
     database_url: str | None = None,
+    limits: RunLimits | None = None,
 ) -> dict:
     """Execute one session. Omit database_url for SQLite in the given workspace."""
+    limits = RunLimits.model_validate(limits or {})
     if mode not in {"live", "scripted"}:
         raise ValueError("mode must be live or scripted")
     if mode == "scripted" and request != DEFAULT_REQUEST:
@@ -55,6 +58,7 @@ async def run_research(
     )
     metadata = {
         "schema_version": 1,
+        "runtime_settings": limits.model_dump(),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "provenance": capture_provenance(),
         "run_id": run_id,
@@ -81,7 +85,11 @@ async def run_research(
     runner = None
     try:
         agent = build_agent(
-            Path(workspace), architecture, database_url=database_url, model_factory=factory
+            Path(workspace),
+            architecture,
+            database_url=database_url,
+            model_factory=factory,
+            review_repair=limits.review_repair,
         )
         runner = Runner(app_name="quant_research_agents", node=agent, session_service=sessions)
         await sessions.create_session(
@@ -90,13 +98,13 @@ async def run_research(
             session_id=run_id,
             state={"run_id": run_id, "mode": mode},
         )
-        async with asyncio.timeout(180):
+        async with asyncio.timeout(limits.timeout_seconds):
             with (directory / "trace.jsonl").open("w") as trace:
                 async for event in runner.run_async(
                     user_id="local",
                     session_id=run_id,
                     new_message=types.Content(role="user", parts=[types.Part(text=request)]),
-                    run_config=RunConfig(max_llm_calls=16),
+                    run_config=RunConfig(max_llm_calls=limits.max_llm_calls),
                 ):
                     calls = [
                         {"name": call.name, "args": call.args}

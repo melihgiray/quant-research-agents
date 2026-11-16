@@ -7,6 +7,12 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
+class RunLimits(StrictModel):
+    max_llm_calls: int = Field(default=16, ge=1, le=64, strict=True)
+    timeout_seconds: float = Field(default=180, ge=1, le=600)
+    review_repair: bool = Field(default=True, strict=True)
+
+
 class ExperimentConfig(StrictModel):
     lookback: int = Field(default=252, ge=42, le=504)
     skip: int = Field(default=21, ge=1, le=63)

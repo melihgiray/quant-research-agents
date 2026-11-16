@@ -29,8 +29,9 @@ def test_evaluation_isolates_trials_retains_failures_and_checkpoints(tmp_path, m
     )
     workspaces = []
 
-    async def fake_run(request, workspace, architecture, mode):
+    async def fake_run(request, workspace, architecture, mode, limits):
         assert mode == "live"
+        assert limits.max_llm_calls == 16
         assert request == "real prices"
         assert workspace not in workspaces
         assert not workspace.exists()

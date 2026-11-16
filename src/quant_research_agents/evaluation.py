@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .models import StrictModel
+from .models import RunLimits, StrictModel
 from .runtime import run_research
 
 
@@ -46,7 +46,14 @@ def _write_checkpoint(path: Path, payload: dict) -> None:
     temporary.replace(path)
 
 
-async def evaluate(cases_path: Path, workspace: Path, trials: int = 1, seed: int = 42) -> Path:
+async def evaluate(
+    cases_path: Path,
+    workspace: Path,
+    trials: int = 1,
+    seed: int = 42,
+    limits: RunLimits | None = None,
+) -> Path:
+    limits = RunLimits.model_validate(limits or {})
     if not 1 <= trials <= 20:
         raise ValueError("trials must be between 1 and 20")
     source = cases_path.read_bytes()
@@ -72,6 +79,7 @@ async def evaluate(cases_path: Path, workspace: Path, trials: int = 1, seed: int
         "cases_sha256": hashlib.sha256(source).hexdigest(),
         "cases": cases,
         "trials": trials,
+        "runtime_settings": limits.model_dump(),
         "order_seed": seed,
         "scheduled_runs": len(schedule),
         "database_policy": "fresh SQLite database per case, trial and architecture",
@@ -95,7 +103,7 @@ async def evaluate(cases_path: Path, workspace: Path, trials: int = 1, seed: int
             }
             try:
                 outcome = await run_research(
-                    case["prompt"], run_workspace, architecture, mode="live"
+                    case["prompt"], run_workspace, architecture, mode="live", limits=limits
                 )
                 entry.update(**score_case(case, outcome), run=outcome)
             except Exception as error:
