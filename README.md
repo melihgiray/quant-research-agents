@@ -30,6 +30,7 @@ the same configuration does not duplicate its experiment record.
 
 ```sh
 quant-agents demo --architecture single
+quant-agents doctor
 quant-agents history
 pytest -q
 ruff check .

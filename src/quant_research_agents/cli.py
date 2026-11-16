@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .diagnostics import diagnose
 from .evaluation import evaluate
 from .runtime import DEFAULT_REQUEST, run_research
 from .store import ExperimentStore
@@ -24,6 +25,9 @@ def main() -> int:
     live.add_argument("prompt", nargs="?", default=DEFAULT_REQUEST)
     live.add_argument("--architecture", choices=["multi", "single"], default="multi")
     commands.add_parser("history", help="Read recent experiment records from SQL")
+    commands.add_parser(
+        "doctor", help="Check local setup without network calls or credential disclosure"
+    )
     evaluation = commands.add_parser("evaluate", help="Run the live development evaluation set")
     evaluation.add_argument(
         "--live",
@@ -36,7 +40,9 @@ def main() -> int:
     evaluation.add_argument("--seed", type=int, default=42, help="Execution-order shuffle seed")
     args = parser.parse_args()
     try:
-        if args.command == "history":
+        if args.command == "doctor":
+            result = diagnose(args.workspace)
+        elif args.command == "history":
             result = ExperimentStore(args.workspace, os.getenv("DATABASE_URL")).recent()
         elif args.command == "evaluate":
             if not (
