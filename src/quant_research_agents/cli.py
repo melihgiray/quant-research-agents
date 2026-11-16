@@ -32,6 +32,8 @@ def main() -> int:
         help="Acknowledge that this makes billable model calls",
     )
     evaluation.add_argument("--cases", type=Path, default=Path("evals/cases.json"))
+    evaluation.add_argument("--trials", type=int, default=1, help="Repetitions per case, 1 to 20")
+    evaluation.add_argument("--seed", type=int, default=42, help="Execution-order shuffle seed")
     args = parser.parse_args()
     try:
         if args.command == "history":
@@ -43,7 +45,13 @@ def main() -> int:
                 or os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
             ):
                 parser.error("Set GOOGLE_API_KEY in .env before running live evaluations.")
-            result = {"evaluation_file": str(asyncio.run(evaluate(args.cases, args.workspace)))}
+            result = {
+                "evaluation_file": str(
+                    asyncio.run(
+                        evaluate(args.cases, args.workspace, trials=args.trials, seed=args.seed)
+                    )
+                )
+            }
         else:
             result = asyncio.run(
                 run_research(
@@ -51,6 +59,7 @@ def main() -> int:
                     args.workspace,
                     args.architecture,
                     "scripted" if args.command == "demo" else "live",
+                    database_url=os.getenv("DATABASE_URL"),
                 )
             )
         print(json.dumps(result, indent=2))

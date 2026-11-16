@@ -54,12 +54,12 @@ Live requests use your provider account and may incur charges.
 For the ADK development interface, run from the repository root:
 
 ```sh
-adk web agents
+adk web --max_llm_calls 16 agents
 ```
 
 Select `research_copilot`. Use a new session for a new experiment. The development
-interface runs the same graph, but the CLI is the supported path for the project’s
-call/time bounds and complete trace exports. Conversational sessions are in memory
+interface runs the same graph with the command above's call limit. The CLI also
+enforces the time limit and exports complete traces. Conversational sessions are in memory
 in the CLI; the SQL experiment records and exported artifacts persist.
 
 ## Workflow
@@ -71,18 +71,24 @@ flowchart LR
     R --> A[Analyst: SQL history and backtest]
     A --> V[Reviewer: typed claims and citations]
     V --> G[Python validation]
-    G --> O[HTML, Markdown and JSON report]
+    G -->|Pass| O[HTML, Markdown and JSON report]
+    G -->|Invalid review: once| C[Correction using canonical evidence]
+    C --> G
 ```
 
 The ADK 2 graph uses `Workflow` with explicit edges. Four `LlmAgent` nodes
 coordinate through session state. A deterministic finalizer recomputes metrics
 from saved returns, checks both variants’ numerical claims, and accepts only
-retrieved citation IDs before writing a report. Invalid output fails the run;
-automatic reviewer repair is future work.
+retrieved citation IDs before writing a report. Invalid numerical claims or citation
+IDs get one correction attempt with validation feedback and canonical evidence. The correction
+agent has no tools and cannot change the experiment. A second invalid review fails
+the run without publishing a report. Stored-data integrity errors and malformed
+output rejected by the SDK are not eligible for this correction step.
 
 The single-agent baseline uses the same retrieval, SQL, experiment, and validation
 tools. It combines planning, execution, and review in one agent so the development
-evaluation can compare orchestration choices.
+evaluation can compare orchestration choices. Both architectures use the same
+optional correction step, which is recorded separately in run metadata.
 
 ## What is implemented
 
@@ -95,7 +101,7 @@ evaluation can compare orchestration choices.
 | External API | FRED context with bounded retries, timeouts, and sanitized errors |
 | Execution | Two momentum variants using attributed code from quant-research-system |
 | Verification | Numerical checks, citation-ID checks, trace export, tests and a CI template |
-| Evaluation | Eight development cases with single/multi orchestration; no live scores reported yet |
+| Evaluation | Eight development cases, isolated databases, shuffled order, repeated trials and failure artifacts; no live scores reported yet |
 
 Retrieval is deliberately small in this release. The trained hybrid retriever from
 [quant-retrieval](https://github.com/melihgiray/quant-retrieval) is not connected yet.
@@ -132,13 +138,17 @@ and unavailable APIs produce explicit tool statuses, not fabricated observations
 
 ```sh
 quant-agents evaluate --live --cases evals/cases.json
+# Optional repeated trials (48 live runs for the eight supplied cases):
+quant-agents evaluate --live --trials 3 --seed 42
 ```
 
 This makes live model calls for both architectures. The eight cases are a
 development set, not a held-out benchmark. They check requested parameters,
 tool use, supported execution, and refusal of unsupported requests. Manually
-review citation entailment, interpretation, and traces. Run repeated trials and
-use an isolated experiment database before drawing comparisons. Token usage is
+review citation entailment, interpretation, and traces. Every attempt gets a fresh
+SQLite database, including when `DATABASE_URL` is set. Execution order is shuffled
+using the recorded seed; results are checkpointed after every attempt. Failed runs
+retain their metadata and traces. Token usage is
 recorded when the provider supplies it; unavailable usage and uncomputed dollar
 cost remain `null`, never zero. See [evaluation protocol](docs/EVALUATION.md).
 

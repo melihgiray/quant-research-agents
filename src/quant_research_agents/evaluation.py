@@ -1,10 +1,26 @@
-"""A small live evaluation harness; scripted demos are never quality benchmarks."""
+"""Live development evaluations with isolated databases and retained failures."""
 
+import hashlib
 import json
+import random
 import uuid
+from datetime import datetime, timezone
+from importlib.metadata import version
 from pathlib import Path
+from typing import Literal
 
+from pydantic import Field
+
+from .models import StrictModel
 from .runtime import run_research
+
+
+class EvaluationCase(StrictModel):
+    id: str = Field(min_length=1, max_length=100)
+    prompt: str = Field(min_length=1, max_length=8000)
+    expected_status: Literal["completed", "refused"]
+    required_tools: list[str] = Field(default_factory=list)
+    expected_config: dict = Field(default_factory=dict)
 
 
 def score_case(case: dict, result: dict) -> dict:
@@ -24,43 +40,77 @@ def score_case(case: dict, result: dict) -> dict:
     return {"checks": checks, "automated_pass": all(checks.values())}
 
 
-async def evaluate(cases_path: Path, workspace: Path) -> Path:
-    cases = json.loads(cases_path.read_text())
-    results = []
-    for case in cases:
-        for architecture in ("single", "multi"):
+def _write_checkpoint(path: Path, payload: dict) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, allow_nan=False))
+    temporary.replace(path)
+
+
+async def evaluate(cases_path: Path, workspace: Path, trials: int = 1, seed: int = 42) -> Path:
+    if not 1 <= trials <= 20:
+        raise ValueError("trials must be between 1 and 20")
+    source = cases_path.read_bytes()
+    cases = [EvaluationCase.model_validate(case).model_dump() for case in json.loads(source)]
+    if not cases or len(cases) > 100:
+        raise ValueError("evaluation requires between 1 and 100 cases")
+    if len({case["id"] for case in cases}) != len(cases):
+        raise ValueError("evaluation case IDs must be unique")
+    schedule = [
+        (case, architecture, trial)
+        for case in cases
+        for trial in range(1, trials + 1)
+        for architecture in ("single", "multi")
+    ]
+    random.Random(seed).shuffle(schedule)
+    directory = Path(workspace) / "evaluations" / uuid.uuid4().hex
+    directory.mkdir(parents=True)
+    destination = directory / "evaluation.json"
+    payload = {
+        "mode": "live",
+        "status": "running",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "cases_sha256": hashlib.sha256(source).hexdigest(),
+        "cases": cases,
+        "trials": trials,
+        "order_seed": seed,
+        "scheduled_runs": len(schedule),
+        "database_policy": "fresh SQLite database per case, trial and architecture",
+        "versions": {name: version(name) for name in ("quant-research-agents", "google-adk")},
+        "results": [],
+        "limits": "Small development set, not a held-out benchmark. Automated checks do not "
+        "measure citation entailment, prose accuracy, or planner reasoning. "
+        "Review traces manually before comparing architectures.",
+    }
+    _write_checkpoint(destination, payload)
+    try:
+        for sequence, (case, architecture, trial) in enumerate(schedule):
+            # Fresh databases prevent either architecture from seeing a previous
+            # trial's experiments. DATABASE_URL intentionally does not apply here.
+            run_workspace = directory / f"attempt-{sequence:04d}"
+            entry = {
+                "case_id": case["id"],
+                "architecture": architecture,
+                "trial": trial,
+                "sequence": sequence,
+            }
             try:
-                outcome = await run_research(case["prompt"], workspace, architecture, mode="live")
-                results.append(
-                    {
-                        "case_id": case["id"],
-                        "architecture": architecture,
-                        **score_case(case, outcome),
-                        "run": outcome,
-                    }
+                outcome = await run_research(
+                    case["prompt"], run_workspace, architecture, mode="live"
                 )
+                entry.update(**score_case(case, outcome), run=outcome)
             except Exception as error:
-                results.append(
-                    {
-                        "case_id": case["id"],
-                        "architecture": architecture,
-                        "automated_pass": False,
-                        "error_type": type(error).__name__,
-                    }
+                artifacts = list((run_workspace / "runs").glob("*/run.json"))
+                entry.update(
+                    automated_pass=False,
+                    error_type=type(error).__name__,
+                    run=json.loads(artifacts[0].read_text()) if artifacts else None,
                 )
-    destination = workspace / "evaluations" / f"{uuid.uuid4().hex}.json"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(
-            {
-                "mode": "live",
-                "cases": str(cases_path),
-                "results": results,
-                "limits": "Small development set, not a held-out benchmark. Automated checks do not "
-                "measure citation entailment, prose accuracy, or planner reasoning. "
-                "Review traces manually and repeat trials before comparing architectures.",
-            },
-            indent=2,
-        )
-    )
+            payload["results"].append(entry)
+            _write_checkpoint(destination, payload)
+        payload["status"] = "completed"
+    finally:
+        if payload["status"] == "running":
+            payload["status"] = "interrupted"
+        payload["finished_at"] = datetime.now(timezone.utc).isoformat()
+        _write_checkpoint(destination, payload)
     return destination

@@ -11,16 +11,20 @@ from .experiment import compute_metrics
 from .models import Review
 
 
+class ReviewValidationError(ValueError):
+    """Model output can be corrected without changing the executed experiment."""
+
+
 def validate_review(review: Review, result: dict, evidence: list[dict]) -> None:
     if review.status != "completed":
-        raise ValueError("cannot publish a completed experiment with a refusal review")
+        raise ReviewValidationError("cannot publish a completed experiment with a refusal review")
     known = {item["id"] for item in evidence}
     if not review.citations or not set(review.citations) <= known:
-        raise ValueError("review must cite retrieved evidence IDs only")
+        raise ReviewValidationError("review must cite retrieved evidence IDs only")
     if not review.claims:
-        raise ValueError("review must include verifiable numerical claims")
+        raise ReviewValidationError("review must include verifiable numerical claims")
     if {claim.variant for claim in review.claims} != {"baseline", "volatility_scaled"}:
-        raise ValueError("review must include a numerical claim for both variants")
+        raise ReviewValidationError("review must include a numerical claim for both variants")
     recomputed = {
         name: compute_metrics(pd.Series([row["net"] for row in series]))
         for name, series in result["series"].items()
@@ -35,7 +39,9 @@ def validate_review(review: Review, result: dict, evidence: list[dict]) -> None:
     for claim in review.claims:
         actual = recomputed[claim.variant][claim.metric]
         if actual is None or not math.isclose(claim.value, actual, rel_tol=1e-5, abs_tol=5e-5):
-            raise ValueError(f"unsupported numerical claim: {claim.variant}.{claim.metric}")
+            raise ReviewValidationError(
+                f"unsupported numerical claim: {claim.variant}.{claim.metric}"
+            )
 
 
 def write_report(

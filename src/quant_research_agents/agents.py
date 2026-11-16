@@ -8,9 +8,10 @@ from google.adk.agents import BaseAgent, LlmAgent
 from google.adk.events import Event, EventActions
 from google.adk.workflow import START, BaseNode, Workflow
 from google.genai import types
+from pydantic import ValidationError
 
 from .models import Plan, Review
-from .reporting import write_report
+from .reporting import ReviewValidationError, validate_review, write_report
 from .tools import ResearchTools, structured
 
 POLICY = """You are part of Quant Research Copilot.
@@ -36,21 +37,81 @@ your claims and citations; it will reject unsupported values.
 """
 
 
+def reviewer_instruction(context):
+    # Sibling tool-response messages are not guaranteed to reach the reviewer.
+    # Both the initial review and correction receive canonical session data.
+    return (
+        POLICY
+        + REVIEW_RULES
+        + "\nIf VALIDATION_FEEDBACK_JSON is present, correct the previous Review using "
+        "only the canonical evidence and experiment below. Do not change the experiment. "
+        "You have one correction attempt and no execution tools.\n"
+        + "PLAN_JSON: "
+        + json.dumps(structured(context.state.get("plan")))
+        + "\nEVIDENCE_JSON: "
+        + json.dumps(context.state.get("evidence", []))
+        + "\nEXPERIMENT_JSON: "
+        + json.dumps(context.state.get("experiment_summary"))
+        + "\nMACRO_CONTEXT_JSON: "
+        + json.dumps(context.state.get("macro_context"))
+        + "\nVALIDATION_FEEDBACK_JSON: "
+        + json.dumps(context.state.get("validation_feedback"))
+        + "\nPREVIOUS_REVIEW_JSON: "
+        + json.dumps(context.state.get("review"))
+    )
+
+
 class FinalizeReport(BaseAgent):
     service: Any
 
+    def checked_review(self, state):
+        try:
+            review = Review.model_validate(structured(state.get("review")))
+        except (ValidationError, json.JSONDecodeError) as error:
+            raise ReviewValidationError("review JSON must match the Review schema") from error
+        experiment_id = state.get("experiment_id")
+        result = self.service.store.get(experiment_id) if experiment_id else None
+        if review.status == "refused":
+            if experiment_id:
+                raise ReviewValidationError(
+                    "review refused after an experiment; review its results"
+                )
+            if review.claims:
+                raise ReviewValidationError("a refusal cannot contain numerical claims")
+        else:
+            if result is None:
+                raise ReviewValidationError("no executed experiment to report; explain the refusal")
+            validate_review(review, result, state.get("evidence", []))
+        return review, result
+
     async def _run_async_impl(self, ctx):
         state = ctx.session.state
-        review = Review.model_validate(structured(state.get("review")))
+        for attempt in range(2):
+            try:
+                review, result = self.checked_review(state)
+                break
+            except ReviewValidationError as error:
+                feedback = {"error": str(error), "attempt": attempt + 1, "retry": attempt == 0}
+                yield Event(
+                    author=self.name,
+                    content=types.Content(
+                        role="model", parts=[types.Part(text=json.dumps(feedback))]
+                    ),
+                    actions=EventActions(
+                        state_delta={
+                            "validation_feedback": feedback,
+                            "review_repair_attempts": 1,
+                        }
+                    ),
+                )
+                if attempt == 1:
+                    raise
+                async for event in self.sub_agents[0].run_async(ctx):
+                    yield event
         if review.status == "refused":
-            if state.get("experiment_id"):
-                raise ValueError("review refused after an experiment; inspect the trace")
             outcome = {"status": "refused", "reason": review.summary}
         else:
-            experiment_id = state.get("experiment_id")
-            result = self.service.store.get(experiment_id) if experiment_id else None
-            if result is None:
-                raise ValueError("no executed experiment to report")
+            experiment_id = result["experiment_id"]
             run_id = state.get("run_id", uuid.uuid4().hex)
             if not isinstance(run_id, str) or not run_id.isalnum():
                 raise ValueError("invalid run identifier")
@@ -64,6 +125,7 @@ class FinalizeReport(BaseAgent):
                 macro_context=state.get("macro_context"),
             )
             outcome = {"status": "completed", "experiment_id": experiment_id, **paths}
+        outcome["review_repair_attempts"] = state.get("review_repair_attempts", 0)
         yield Event(
             author=self.name,
             content=types.Content(role="model", parts=[types.Part(text=json.dumps(outcome))]),
@@ -97,7 +159,8 @@ def build_agent(
             ),
         )
 
-    finalizer = FinalizeReport(name="save_verified_report", service=service)
+    repair = llm("review_repair", reviewer_instruction, schema=Review, output_key="review")
+    finalizer = FinalizeReport(name="save_verified_report", service=service, sub_agents=[repair])
     if architecture == "single":
         single = llm(
             "single_analyst",
@@ -148,22 +211,6 @@ Return the experiment ID, exact metrics, and limitations for review.
         [service.list_experiments, service.run_backtest, service.fetch_macro_context],
         output_key="analysis_notes",
     )
-
-    def reviewer_instruction(context):
-        # ADK does not necessarily forward sibling tool-response messages. Pass
-        # canonical tool data through session state instead of trusting summaries.
-        return (
-            POLICY
-            + REVIEW_RULES
-            + "\nPLAN_JSON: "
-            + json.dumps(structured(context.state.get("plan")))
-            + "\nEVIDENCE_JSON: "
-            + json.dumps(context.state.get("evidence", []))
-            + "\nEXPERIMENT_JSON: "
-            + json.dumps(context.state.get("experiment_summary"))
-            + "\nMACRO_CONTEXT_JSON: "
-            + json.dumps(context.state.get("macro_context"))
-        )
 
     reviewer = llm("reviewer", reviewer_instruction, schema=Review, output_key="review")
     return Workflow(

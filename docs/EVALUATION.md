@@ -11,6 +11,11 @@ No live benchmark scores are recorded yet.
 architectures and writes every outcome, failed run, elapsed time, observed token
 usage, and automatic checks to a JSON artifact. A model invocation is live only
 when `mode` is `live`; scripted runs must never be included in quality comparisons.
+Use `--trials 3 --seed 42` to repeat each case three times in a reproducibly shuffled
+order. Every attempt uses its own SQLite database regardless of `DATABASE_URL`.
+The artifact includes a snapshot and fingerprint of the cases, package versions,
+trial numbers, execution order, and reviewer correction counts. Results are saved
+after each attempt, so interrupted evaluations retain completed outcomes.
 
 ## Before reporting a comparison
 
@@ -19,9 +24,9 @@ when `mode` is `live`; scripted runs must never be included in quality compariso
    source IDs. Include missing evidence, contradictory notes, malformed outputs,
    unavailable APIs, and prompt injection inside retrieved material.
 3. Pin the model, SDK, code revision, corpus, data, and tool implementations.
-4. Use fresh equivalent databases for each architecture, repeat each task several
-   times, and randomize execution order. The current harness reuses its database,
-   so it is for development and does not claim a controlled benchmark.
+4. Use the harness's fresh databases, repeated trials, and randomized execution
+   order. Hold model configuration and external context constant between runs;
+   API drift and model nondeterminism remain possible confounders.
 5. Score task completion, tool arguments and ordering, numerical correctness,
    citation entailment, unsupported claims, and appropriate abstention.
 6. Publish per-case failures, aggregate uncertainty, median/p95 latency, and provider
@@ -33,3 +38,6 @@ when `mode` is `live`; scripted runs must never be included in quality compariso
 The current automated pass flag only checks output status, required tool presence,
 requested configuration and whether refusal avoided execution. It is not a proxy
 for every quality dimension above. Citation IDs alone do not establish entailment.
+Scripted fault-injection tests cover incorrect numbers and invented citations,
+successful correction, exhaustion after one correction, and no re-execution during
+correction. These establish control flow, not real-model correction success rates.

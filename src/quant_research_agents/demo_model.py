@@ -53,13 +53,13 @@ class ScriptedDemoModel(BaseLlm):
                 research_query="momentum volatility execution costs",
             )
             content = types.Content(role="model", parts=[types.Part(text=plan.model_dump_json())])
-        elif self.role in {"reviewer", "single_analyst"}:
+        elif self.role in {"reviewer", "review_repair", "single_analyst"}:
             responses = {}
             for turn in llm_request.contents:
                 for part in turn.parts or []:
                     if part.function_response:
                         responses[part.function_response.name] = part.function_response.response
-            if self.role == "reviewer":
+            if self.role in {"reviewer", "review_repair"}:
                 instruction = llm_request.config.system_instruction
                 if not isinstance(instruction, str):
                     instruction = "\n".join(p.text or "" for p in instruction.parts)

@@ -20,8 +20,14 @@ DEFAULT_REQUEST = (
 
 
 async def run_research(
-    request: str, workspace: Path, architecture="multi", mode="live", model_factory=None
+    request: str,
+    workspace: Path,
+    architecture="multi",
+    mode="live",
+    model_factory=None,
+    database_url: str | None = None,
 ) -> dict:
+    """Execute one session. Omit database_url for SQLite in the given workspace."""
     if mode not in {"live", "scripted"}:
         raise ValueError("mode must be live or scripted")
     if mode == "scripted" and request != DEFAULT_REQUEST:
@@ -58,6 +64,7 @@ async def run_research(
         "usage_observed": False,
         "estimated_cost_usd": None,
         "tool_calls": [],
+        "review_repair_attempts": 0,
         "error_type": None,
     }
     sessions = InMemorySessionService()
@@ -66,17 +73,18 @@ async def run_research(
         if mode == "scripted"
         else model_factory
     )
-    agent = build_agent(
-        Path(workspace), architecture, database_url=os.getenv("DATABASE_URL"), model_factory=factory
-    )
-    runner = Runner(app_name="quant_research_agents", node=agent, session_service=sessions)
-    await sessions.create_session(
-        app_name="quant_research_agents",
-        user_id="local",
-        session_id=run_id,
-        state={"run_id": run_id, "mode": mode},
-    )
+    runner = None
     try:
+        agent = build_agent(
+            Path(workspace), architecture, database_url=database_url, model_factory=factory
+        )
+        runner = Runner(app_name="quant_research_agents", node=agent, session_service=sessions)
+        await sessions.create_session(
+            app_name="quant_research_agents",
+            user_id="local",
+            session_id=run_id,
+            state={"run_id": run_id, "mode": mode},
+        )
         async with asyncio.timeout(180):
             with (directory / "trace.jsonl").open("w") as trace:
                 async for event in runner.run_async(
@@ -90,6 +98,10 @@ async def run_research(
                         for call in event.get_function_calls()
                     ]
                     metadata["tool_calls"].extend(call["name"] for call in calls)
+                    if "review_repair_attempts" in event.actions.state_delta:
+                        metadata["review_repair_attempts"] = event.actions.state_delta[
+                            "review_repair_attempts"
+                        ]
                     usage = getattr(event, "usage_metadata", None)
                     if usage:
                         metadata["usage_observed"] = True
@@ -119,6 +131,9 @@ async def run_research(
             raise RuntimeError("workflow ended without a validated report or explicit refusal")
         metadata.update(outcome)
         return metadata
+    except asyncio.CancelledError:
+        metadata.update(status="interrupted", error_type="CancelledError")
+        raise
     except Exception as error:
         metadata.update(status="failed", error_type=type(error).__name__)
         raise
@@ -128,4 +143,5 @@ async def run_research(
             for key in ("prompt_tokens", "output_tokens", "total_tokens"):
                 metadata[key] = None
         (directory / "run.json").write_text(json.dumps(metadata, indent=2, allow_nan=False))
-        await runner.close()
+        if runner is not None:
+            await runner.close()

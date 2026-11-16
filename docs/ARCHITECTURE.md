@@ -40,8 +40,20 @@ Invalid tool arguments return typed status messages so an agent can correct them
 within its call budget. FRED has two bounded attempts. Unsupported requests should
 produce explicit refusal; model adherence is a live evaluation target. Missing
 execution results, invented citation IDs, and wrong structured numbers fail report
-finalization. They cannot produce a verified report. The report's free-form prose
-is not covered by numerical validation.
+validation. The finalizer gives a tool-free correction agent one attempt with
+canonical results, retrieved evidence, the previous review, and explicit feedback.
+Only review-validation errors are retryable; inconsistent stored metrics, I/O errors,
+and malformed output rejected before finalization by the SDK fail directly.
+A second invalid review fails the run without a report. Both initial
+architectures use this same optional correction step and record its usage. The
+report's free-form prose is not covered by numerical validation.
+
+Development evaluations create a separate SQLite database per case, architecture,
+and trial. They shuffle the schedule using a recorded seed, snapshot the cases and
+their SHA-256, and checkpoint completed outcomes after every attempt. Exceptions
+retain available run metadata; an interrupted evaluation retains previous outcomes.
+This prevents accidental experiment-history leakage but does not make the visible
+development cases a held-out benchmark.
 
 CLI conversations use `InMemorySessionService`; persistent experiment records do
 not imply resumable conversational state. The first version does not implement

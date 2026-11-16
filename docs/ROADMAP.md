@@ -22,7 +22,9 @@
 ## Milestone 3: reliability and comparative evidence
 
 - [ ] Freeze a held-out task set and publish repeated live evaluation results.
-- [ ] Add a bounded reviewer correction loop and measure its benefit and cost.
+- [x] Add one bounded reviewer correction with fault-injection integration tests.
+- [x] Isolate evaluation databases, shuffle trials, and retain failure artifacts.
+- [ ] Measure the correction step's live success rate, benefit, latency and cost.
 - [ ] Add a CrewAI implementation of the same workflow and another model provider.
 - [ ] Persist conversational sessions and test restart/recovery behavior.
 - [ ] Deploy a small authenticated demonstration after local live behavior is verified.
