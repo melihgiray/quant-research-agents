@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from .diagnostics import diagnose
 from .evaluation import evaluate
+from .retrieval_evaluation import evaluate_retrieval
 from .runtime import DEFAULT_REQUEST, run_research
 from .store import ExperimentStore
 
@@ -38,9 +39,20 @@ def main() -> int:
     evaluation.add_argument("--cases", type=Path, default=Path("evals/cases.json"))
     evaluation.add_argument("--trials", type=int, default=1, help="Repetitions per case, 1 to 20")
     evaluation.add_argument("--seed", type=int, default=42, help="Execution-order shuffle seed")
+    retrieval = commands.add_parser(
+        "evaluate-retrieval", help="Score retrieval without model calls"
+    )
+    retrieval.add_argument("--cases", type=Path, default=Path("evals/retrieval_cases.json"))
+    retrieval.add_argument("--k", type=int, default=3)
+    retrieval.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
-        if args.command == "doctor":
+        if args.command == "evaluate-retrieval":
+            result = evaluate_retrieval(json.loads(args.cases.read_text()), k=args.k)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, allow_nan=False))
+        elif args.command == "doctor":
             result = diagnose(args.workspace)
         elif args.command == "history":
             result = ExperimentStore(args.workspace, os.getenv("DATABASE_URL")).recent()

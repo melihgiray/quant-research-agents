@@ -1,5 +1,14 @@
 # Evaluation protocol
 
+## Retrieval-only evaluation
+
+Run `quant-agents evaluate-retrieval --k 3 --output workspace/retrieval.json`
+without an API key. Twelve visible cases label relevant document IDs or an empty
+set for abstention. Hit rate, mean recall and reciprocal rank use answerable cases
+only; abstention accuracy uses unanswerable cases only. An absent group produces
+`null`, not a perfect score. The result retains each ranked list and fingerprints
+the cases and corpus. This small development set is not a general RAG benchmark.
+
 ## Current evidence
 
 The automated tests exercise mathematical invariants, SQL persistence, API failure

@@ -1,0 +1,14 @@
+[
+  {"id":"formation", "query":"momentum lookback skip formation window", "relevant_ids":["momentum"]},
+  {"id":"long-short", "query":"long short legs weight rebalance", "relevant_ids":["momentum"]},
+  {"id":"lag", "query":"target weights next row execution lag", "relevant_ids":["execution", "momentum"]},
+  {"id":"future", "query":"changing future observations prior results", "relevant_ids":["execution"]},
+  {"id":"defensive", "query":"defensive regime scales exposure", "relevant_ids":["regime"]},
+  {"id":"drawdown", "query":"drawdown running equity peak", "relevant_ids":["metrics"]},
+  {"id":"sharpe", "query":"Sharpe mean standard deviation risk-free", "relevant_ids":["metrics"]},
+  {"id":"costs", "query":"turnover basis points borrowing funding costs", "relevant_ids":["fixture-limitations"]},
+  {"id":"synthetic", "query":"synthetic assets seed real ETF prices", "relevant_ids":["fixture-limitations"]},
+  {"id":"unknown-medical", "query":"pediatric vaccine dosage", "relevant_ids":[]},
+  {"id":"unknown-food", "query":"sourdough fermentation temperature", "relevant_ids":[]},
+  {"id":"unknown-code", "query":"kubernetes ingress controller", "relevant_ids":[]}
+]
