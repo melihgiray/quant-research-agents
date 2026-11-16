@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from .comparison import compare_experiments
 from .diagnostics import diagnose
 from .evaluation import evaluate
+from .evaluation_summary import summarize_evaluation
 from .retrieval_evaluation import evaluate_retrieval
 from .runtime import DEFAULT_REQUEST, run_research
 from .store import ExperimentStore
@@ -56,9 +57,19 @@ def main() -> int:
     )
     compare.add_argument("left_id")
     compare.add_argument("right_id")
+    summarize = commands.add_parser(
+        "summarize", help="Summarize live evaluations without hiding failures"
+    )
+    summarize.add_argument("evaluation", type=Path)
+    summarize.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
-        if args.command == "compare":
+        if args.command == "summarize":
+            result = summarize_evaluation(json.loads(args.evaluation.read_text()))
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, allow_nan=False))
+        elif args.command == "compare":
             result = compare_experiments(
                 ExperimentStore(args.workspace, os.getenv("DATABASE_URL")),
                 args.left_id,

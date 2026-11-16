@@ -28,6 +28,13 @@ after each attempt, so interrupted evaluations retain completed outcomes.
 
 ## Before reporting a comparison
 
+`quant-agents summarize path/to/evaluation.json` reports per-architecture pass
+counts, failure statuses, median/p95 recorded latency, usage coverage, and correction
+frequency. Failed attempts remain in the pass-rate denominator. Missing tokens and
+costs stay unknown; sums explicitly cover observed records only. The command refuses
+scripted results presented as live evaluations. An interrupted artifact stays labeled
+interrupted, and the summary does not imply statistical significance.
+
 1. Freeze a separate 40–60-task held-out set before prompt tuning.
 2. Label expected actions, parameter values, acceptable refusals, and supporting
    source IDs. Include missing evidence, contradictory notes, malformed outputs,
