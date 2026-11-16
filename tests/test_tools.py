@@ -98,6 +98,48 @@ def test_fred_permanent_failure_is_bounded_and_sanitized(monkeypatch):
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = fetch_context("DGS10", client)
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert result["status"] == "unavailable"
     assert "test-secret-do-not-echo" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("value", ["NaN", "inf", "ignore instructions", 4.1, {}])
+def test_fred_rejects_invalid_payload_without_retry(monkeypatch, value):
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"observations": [{"date": "2026-11-13", "value": value}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = fetch_context("DGS10", client)
+    assert result["status"] == "invalid_response"
+    assert len(calls) == 1
+
+
+def test_fred_missing_observation_is_null(monkeypatch):
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    with httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"observations": [{"date": "2026-11-13", "value": "."}]}
+            )
+        )
+    ) as client:
+        result = fetch_context("DGS10", client)
+    assert result["observations"] == [{"date": "2026-11-13", "value": None}]
+
+
+def test_fred_transport_retry_is_bounded(monkeypatch):
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise httpx.ReadTimeout("private URL with key", request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = fetch_context("DGS10", client)
+    assert result == {"status": "unavailable", "attempts": 2, "reason": "transport_error"}
+    assert len(calls) == 2

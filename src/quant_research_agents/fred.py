@@ -1,11 +1,33 @@
-"""An optional external API, kept separate from strategy inputs."""
+"""Optional FRED context with bounded transient retries and validated observations."""
 
+import math
 import os
 import time
+from datetime import date
 
 import httpx
 
 ALLOWED_SERIES = {"VIXCLS", "DGS10", "FEDFUNDS"}
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _observations(payload: dict) -> list[dict]:
+    rows = payload["observations"]
+    if not isinstance(rows, list) or len(rows) > 10:
+        raise ValueError("invalid observation count")
+    result = []
+    dates = set()
+    for row in rows:
+        day, value = row["date"], row["value"]
+        if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or day in dates:
+            raise ValueError("invalid observation date")
+        dates.add(day)
+        if value == ".":
+            value = None
+        elif not isinstance(value, str) or not math.isfinite(float(value)):
+            raise ValueError("invalid observation value")
+        result.append({"date": day, "value": value})
+    return result
 
 
 def fetch_context(series_id: str, client: httpx.Client | None = None) -> dict:
@@ -17,7 +39,7 @@ def fetch_context(series_id: str, client: httpx.Client | None = None) -> dict:
     owns_client = client is None
     client = client or httpx.Client(timeout=10, follow_redirects=False)
     try:
-        for attempt in range(2):
+        for attempt in range(1, 3):
             try:
                 response = client.get(
                     "https://api.stlouisfed.org/fred/series/observations",
@@ -29,25 +51,33 @@ def fetch_context(series_id: str, client: httpx.Client | None = None) -> dict:
                         "limit": 10,
                     },
                 )
-                if response.status_code in (429, 500, 502, 503, 504) and attempt == 0:
+            except httpx.TransportError:
+                if attempt == 1:
                     time.sleep(0.25)
                     continue
-                response.raise_for_status()
-                observations = response.json()["observations"]
+                return {"status": "unavailable", "attempts": attempt, "reason": "transport_error"}
+            if response.status_code in RETRYABLE_STATUS and attempt == 1:
+                time.sleep(0.25)
+                continue
+            if response.status_code != 200:
                 return {
-                    "status": "ok",
-                    "series_id": series_id,
-                    "source_url": f"https://fred.stlouisfed.org/series/{series_id}",
-                    "usage": "Current report context only; not historical trading inputs.",
-                    "observations": [
-                        {"date": o["date"], "value": o["value"]} for o in observations
-                    ],
+                    "status": "unavailable",
+                    "attempts": attempt,
+                    "reason": "http_error",
+                    "http_status": response.status_code,
                 }
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                if attempt == 0:
-                    time.sleep(0.25)
-        # Never echo HTTP exceptions: their URL can contain the API key.
-        return {"status": "unavailable", "message": "FRED failed after two bounded attempts."}
+            try:
+                observations = _observations(response.json())
+            except (ValueError, KeyError, TypeError, OverflowError):
+                return {"status": "invalid_response", "attempts": attempt}
+            return {
+                "status": "ok",
+                "attempts": attempt,
+                "series_id": series_id,
+                "source_url": f"https://fred.stlouisfed.org/series/{series_id}",
+                "usage": "Current report context only; not historical trading inputs. Missing observations are null.",
+                "observations": observations,
+            }
     finally:
         if owns_client:
             client.close()
