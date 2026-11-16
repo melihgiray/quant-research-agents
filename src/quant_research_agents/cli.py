@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .comparison import compare_experiments
 from .diagnostics import diagnose
 from .evaluation import evaluate
 from .retrieval_evaluation import evaluate_retrieval
@@ -50,9 +51,20 @@ def main() -> int:
         "verify", help="Verify a report and replay its synthetic experiment offline"
     )
     verify.add_argument("report", type=Path)
+    compare = commands.add_parser(
+        "compare", help="Compare saved experiments with matching datasets and windows"
+    )
+    compare.add_argument("left_id")
+    compare.add_argument("right_id")
     args = parser.parse_args()
     try:
-        if args.command == "verify":
+        if args.command == "compare":
+            result = compare_experiments(
+                ExperimentStore(args.workspace, os.getenv("DATABASE_URL")),
+                args.left_id,
+                args.right_id,
+            )
+        elif args.command == "verify":
             result = verify_report(args.report)
         elif args.command == "evaluate-retrieval":
             result = evaluate_retrieval(json.loads(args.cases.read_text()), k=args.k)

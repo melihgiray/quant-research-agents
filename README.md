@@ -41,6 +41,11 @@ pytest -q
 ruff check .
 ```
 
+Use `quant-agents compare LEFT_ID RIGHT_ID` with IDs from history to compare
+saved configurations. It recomputes metrics from stored returns and reports
+parameter changes. Different datasets, engine versions or scoring windows return
+an explicit `incomparable` result instead of a misleading metric difference.
+
 `demo` follows one fixed script. It does not answer arbitrary questions and its
 results are not an evaluation of LLM quality. [Sample report](docs/example-report.md).
 
