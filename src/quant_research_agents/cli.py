@@ -11,6 +11,7 @@ from .evaluation import evaluate
 from .retrieval_evaluation import evaluate_retrieval
 from .runtime import DEFAULT_REQUEST, run_research
 from .store import ExperimentStore
+from .verification import verify_report
 
 
 def main() -> int:
@@ -45,9 +46,15 @@ def main() -> int:
     retrieval.add_argument("--cases", type=Path, default=Path("evals/retrieval_cases.json"))
     retrieval.add_argument("--k", type=int, default=3)
     retrieval.add_argument("--output", type=Path)
+    verify = commands.add_parser(
+        "verify", help="Verify a report and replay its synthetic experiment offline"
+    )
+    verify.add_argument("report", type=Path)
     args = parser.parse_args()
     try:
-        if args.command == "evaluate-retrieval":
+        if args.command == "verify":
+            result = verify_report(args.report)
+        elif args.command == "evaluate-retrieval":
             result = evaluate_retrieval(json.loads(args.cases.read_text()), k=args.k)
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)

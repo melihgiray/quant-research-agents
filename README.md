@@ -28,6 +28,11 @@ Each run also writes a tool trace and execution metadata under `workspace/runs/`
 Experiments are stored in `workspace/experiments.sqlite3` by default. Repeating
 the same configuration does not duplicate its experiment record.
 
+Run `quant-agents verify path/to/report.json` to check a saved report offline.
+It verifies structured claims, evidence content against the installed corpus, and
+replays the synthetic experiment. It cannot authenticate the author, prove that
+retrieval occurred, validate external context, or verify the interpretation's prose.
+
 ```sh
 quant-agents demo --architecture single
 quant-agents doctor
