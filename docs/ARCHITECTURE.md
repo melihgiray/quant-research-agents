@@ -65,3 +65,9 @@ durable background jobs or deployment authentication.
 Use it as a constraints file with the project install. ADK is explicitly pinned in
 `pyproject.toml`. Model aliases can change; select a concrete provider model ID for
 benchmarks, record that configuration, and retain run artifacts.
+
+Each run records UTC creation time, package versions, source and corpus fingerprints,
+and the checkout revision/dirty state when available. Wheel installations can have
+no Git metadata; source fingerprints still identify the installed Python/JSON files.
+Trace events retain their ADK identifiers and timestamps. Fingerprints identify
+content; they do not prove source trustworthiness or sign an artifact.

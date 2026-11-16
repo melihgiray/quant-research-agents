@@ -18,6 +18,8 @@ def test_real_adk_tool_execution_report_and_trace(tmp_path, monkeypatch, archite
     assert result["total_tokens"] is None
     assert result["estimated_cost_usd"] is None
     assert result["review_repair_attempts"] == 0
+    assert len(result["provenance"]["source_sha256"]) == 64
+    assert result["schema_version"] == 1
     assert result["tool_calls"] == ["search_methodology", "list_experiments", "run_backtest"]
     report = json.loads((tmp_path / "runs" / result["run_id"] / "report/report.json").read_text())
     assert report["experiment"]["manifest"]["synthetic"]

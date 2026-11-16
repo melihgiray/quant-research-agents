@@ -3,6 +3,7 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from google.adk.agents.run_config import RunConfig
@@ -12,6 +13,7 @@ from google.genai import types
 
 from .agents import build_agent
 from .demo_model import ScriptedDemoModel
+from .provenance import capture_provenance
 
 DEFAULT_REQUEST = (
     "Compare baseline momentum with volatility-scaled momentum using the bundled synthetic "
@@ -52,6 +54,9 @@ async def run_research(
         else os.getenv("QUANT_MODEL", "gemini-flash-latest")
     )
     metadata = {
+        "schema_version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": capture_provenance(),
         "run_id": run_id,
         "mode": mode,
         "architecture": architecture,
@@ -109,6 +114,8 @@ async def run_research(
                         metadata["output_tokens"] += usage.candidates_token_count or 0
                         metadata["total_tokens"] += usage.total_token_count or 0
                     record = {
+                        "event_id": event.id,
+                        "timestamp": event.timestamp,
                         "author": event.author,
                         "text": "\n".join(
                             part.text
